@@ -1,7 +1,9 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+
+const HCTI_USER_ID = process.env.HCTI_USER_ID;
+const HCTI_API_KEY = process.env.HCTI_API_KEY;
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -34,17 +36,6 @@ function buildHeadlineHtml(headline, highlightWords) {
   return safe;
 }
 
-let browserPromise = null;
-function getBrowser() {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-  }
-  return browserPromise;
-}
-
 app.post('/render-poster', async (req, res) => {
   try {
     const { headline, highlightWords, backgroundUrl, logoUrl } = req.body;
@@ -52,6 +43,12 @@ app.post('/render-poster', async (req, res) => {
     if (!headline || !backgroundUrl || !logoUrl) {
       return res.status(400).json({
         error: 'Missing required fields: headline, backgroundUrl, logoUrl are required.',
+      });
+    }
+
+    if (!HCTI_USER_ID || !HCTI_API_KEY) {
+      return res.status(500).json({
+        error: 'Server is missing HCTI_USER_ID / HCTI_API_KEY environment variables.',
       });
     }
 
@@ -63,16 +60,36 @@ app.post('/render-poster', async (req, res) => {
       .replace('{{BACKGROUND_URL}}', backgroundUrl)
       .replace('{{LOGO_URL}}', logoUrl);
 
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1080, height: 1350 });
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+    // Split out <style> block, HCTI wants html + css separately
+    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+    const css = styleMatch ? styleMatch[1] : '';
+    const bodyMatch = html.match(/<body>([\s\S]*?)<\/body>/);
+    const bodyHtml = bodyMatch ? bodyMatch[1] : html;
 
-    const buffer = await page.screenshot({ type: 'png' });
-    await page.close();
+    const hctiRes = await fetch('https://hcti.io/v1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + Buffer.from(`${HCTI_USER_ID}:${HCTI_API_KEY}`).toString('base64'),
+      },
+      body: JSON.stringify({
+        html: bodyHtml,
+        css: css,
+        viewport_width: 1080,
+        viewport_height: 1350,
+        device_scale: 1,
+      }),
+    });
 
-    res.set('Content-Type', 'image/png');
-    res.send(buffer);
+    const hctiData = await hctiRes.json();
+
+    if (!hctiRes.ok || !hctiData.url) {
+      console.error('HCTI error:', hctiData);
+      return res.status(502).json({ error: 'Image generation failed', details: hctiData });
+    }
+
+    // Return the hosted image URL directly (n8n can fetch/publish from this URL)
+    res.json({ posterUrl: hctiData.url });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
