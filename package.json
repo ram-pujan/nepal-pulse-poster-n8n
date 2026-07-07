@@ -1,0 +1,17 @@
+{
+  "name": "nepal-pulse-poster-renderer",
+  "version": "1.0.0",
+  "description": "Renders Nepal Pulse news posters (logo + headline + highlights over an AI background image) as a PNG, for use as an n8n HTTP node target.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@sparticuz/chromium": "^123.0.1",
+    "puppeteer-core": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
