@@ -1,0 +1,15 @@
+{
+  "name": "nepal-pulse-poster-renderer",
+  "version": "1.0.0",
+  "description": "Renders Nepal Pulse news posters as a PNG via HCTI, for use as an n8n HTTP node target.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
